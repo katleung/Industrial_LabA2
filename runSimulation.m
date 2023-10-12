@@ -26,7 +26,7 @@ classdef runSimulation < handle
             %load in the robot
             self.cupbot = teaUR3(self.baseTr);
             
-            %load bricks
+            %load bricks/cups
             [self.cupID, self.cupStartLoc] = self.loadCups(self); % For testing within the class, without starterScript
 
         end
@@ -52,7 +52,23 @@ classdef runSimulation < handle
         end
 
         %% Move Cup (build wall)
+        function endLoc = buildWall(self)
+            % Set the end locations for the bricks (position of each brick in the wall)
+            endLoc = zeros(2,3);
+            endLoc(1,:) = [0.4, 0, 0];
+            endLoc(2,:) = self.cupStartLoc(1,:);
+            
+            % If a base transform has been applied, update the position of the wall by the same 
+                % transformation (keeping it relative to the robot)
+            for n = 1:length(endLoc)
+                updateEnd = transl(endLoc(n,:)) * self.baseTr;
+                endLoc(n,:) = [updateEnd(1,4), updateEnd(2,4), updateEnd(3,4)];
+            end
 
+            % Set the initial joint angles to the current robot position
+            q = self.cupbot.model.getpos();
+
+        end
 
     end
 end
