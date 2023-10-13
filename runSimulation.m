@@ -7,7 +7,7 @@ classdef runSimulation < handle
 
         cupStartLoc = zeros(1, 3);                  % Initialise all cup startLocation with zeros
         cupStatus = zeros(1,1);           % Initialise all cup statuses to 0 (empty)
-        cupEndLoc = zeros(1, 3);          % Initialise all cup endLocations with zeros
+        cupEndLoc = zeros(2, 3);          % Initialise all cup endLocations with zeros
         cupID = {};                         % Initialise empty cell array to store cup handles (so that they can be deleted later)
 
         rotateEnd = [1 0 0; 0 -1 0; 0 0 -1]; % rotation matrix to make EE face downwards
@@ -61,6 +61,7 @@ classdef runSimulation < handle
         function cupEndLoc = cupEndLocationSet(self)
             cupEndLoc = zeros(1,3);
             endLoc(1,:) = self.cupStartLoc(1,:);
+            endLoc(2,:) = [0.231, 0.333, 0.453];
 
             for n = 1:height(endLoc) % for number of rows in cup array
                 updateLoc = transl(endLoc(n,:)) * self.baseTr;
@@ -77,18 +78,20 @@ classdef runSimulation < handle
                 goalQ = self.cupbot.model.ikine(goalMatrix, 'q0', q, 'mask', [1,1,1,0,0,0])
                 goalPos = self.cupbot.model.fkine(goalQ).T;
                 self.moveCupbotNOCup(self,goalQ,self.jtrajStepCount);
-                pause(0.005);
             end
         end
 
         %% Move UR3 without cup
         function moveCupbotNOCup(self, goal, stepCount)
             % goalPosition = self.robot.model.fkine(goalQ).T;
+            currentPose = self.cupbot.model.getpos();
             steps = jtraj(self.cupbot.model.getpos(), goal, stepCount);
             
             for j = 1:stepCount
-                self.cupbot.model.animate(steps(j, :)) % Animate the robot's movement
+                currentPose(1:3) = steps(j, 1:3); % Only update the position part of the pose
+                self.cupbot.model.animate(currentPose) % Animate the robot's movement
                 drawnow();
+                pause(0.005);
             end
         end
 
