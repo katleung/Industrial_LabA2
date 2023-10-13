@@ -3,12 +3,14 @@ classdef runSimulation < handle
     properties
         baseTr = eye(4);
         cupbot;                             % Create a robot object
+        jtrajStepCount = 100;                % Number of trajectory points for animation
+
         cupStartLoc = zeros(1, 3);                  % Initialise all cup startLocation with zeros
-        brickStatus = zeros(1,1);           % Initialise all cup statuses to 0 (empty)
+        cupStatus = zeros(1,1);           % Initialise all cup statuses to 0 (empty)
         cupEndLoc = zeros(1, 3);          % Initialise all cup endLocations with zeros
         cupID = {};                         % Initialise empty cell array to store cup handles (so that they can be deleted later)
 
-        L = log4matlab('runSimulationLog.log');             % Create a log file for debugging
+        rotateEnd = [1 0 0; 0 -1 0; 0 0 -1]; % rotation matrix to make EE face downwards
 
     end
 
@@ -28,6 +30,10 @@ classdef runSimulation < handle
             
             %load bricks/cups
             [self.cupID, self.cupStartLoc] = self.loadCups(self); % For testing within the class, without starterScript
+            self.cupEndLoc = self.cupEndLocationSet(self)
+
+            %buildwall
+            self.buildWall(self);
 
         end
         
@@ -43,31 +49,47 @@ classdef runSimulation < handle
         function [cupID, cupStartLoc] = loadCups(self)
             cupStartLoc = zeros(1,3);
             cupID = cell(1, 1);
-            cupStartLoc(1,:) = [-0.4, 0.4, 0];
+            cupStartLoc(1,:) = [-0.023, 0.569, 0.253];
             for n = 1:height(cupStartLoc) % for number of rows in cup array
                 updateLoc = transl(cupStartLoc(n,:)) * self.baseTr;
                 cupStartLoc(n,:) = [updateLoc(1,4), updateLoc(2,4), updateLoc(3,4)];
-                cupID{n} = PlaceObject('HalfSizedRedGreenBrick.ply', cupStartLoc(n,:));
+                % cupID{n} = PlaceObject('HalfSizedRedGreenBrick.ply', cupStartLoc(n,:));
             end 
         end
 
+        %% Set end locations for cups
+        function cupEndLoc = cupEndLocationSet(self)
+            cupEndLoc = zeros(1,3);
+            endLoc(1,:) = self.cupStartLoc(1,:);
+
+            for n = 1:height(endLoc) % for number of rows in cup array
+                updateLoc = transl(endLoc(n,:)) * self.baseTr;
+                cupEndLoc(n,:) = [updateLoc(1,4), updateLoc(2,4), updateLoc(3,4)];
+            end 
+        end
         %% Move Cup (build wall)
-        function endLoc = buildWall(self)
-            % Set the end locations for the bricks (position of each brick in the wall)
-            endLoc = zeros(2,3);
-            endLoc(1,:) = [0.4, 0, 0];
-            endLoc(2,:) = self.cupStartLoc(1,:);
-            
-            % If a base transform has been applied, update the position of the wall by the same 
-                % transformation (keeping it relative to the robot)
-            for n = 1:length(endLoc)
-                updateEnd = transl(endLoc(n,:)) * self.baseTr;
-                endLoc(n,:) = [updateEnd(1,4), updateEnd(2,4), updateEnd(3,4)];
-            end
-
+        function buildWall(self)
             % Set the initial joint angles to the current robot position
-            q = self.cupbot.model.getpos();
+            q = self.cupbot.model.getpos()
 
+            for i = 1: height(self.cupEndLoc)
+                goalMatrix = rt2tr(self.rotateEnd, self.cupEndLoc(i,:)')
+                goalQ = self.cupbot.model.ikine(goalMatrix, 'q0', q, 'mask', [1,1,1,0,0,0])
+                goalPos = self.cupbot.model.fkine(goalQ).T;
+                self.moveCupbotNOCup(self,goalQ,self.jtrajStepCount);
+                pause(0.005);
+            end
+        end
+
+        %% Move UR3 without cup
+        function moveCupbotNOCup(self, goal, stepCount)
+            % goalPosition = self.robot.model.fkine(goalQ).T;
+            steps = jtraj(self.cupbot.model.getpos(), goal, stepCount);
+            
+            for j = 1:stepCount
+                self.cupbot.model.animate(steps(j, :)) % Animate the robot's movement
+                drawnow();
+            end
         end
 
     end
