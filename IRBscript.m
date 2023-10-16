@@ -1,16 +1,17 @@
 surf([-2,-2;2,2],[-2,2;-2,2],[-0.605,-0.605;-0.605,-0.605],'CData',imread('Models\concrete.jpg'),'FaceColor','texturemap'); % Generating concrete floor
 hold on;
-toppingsLocation = [0.62, 0, -0.15];
-cupLocation = [-0.464, -0.619, 0.252];
+toppingsLocation = [0.612, 0, -0.1139];
+cupLocation = [0, -0.5101, 0.3491];
+
 
 %% set up robot
-robot = IRB1200;
-q = robot.model.getpos;
+irb = IRB1200;
+q = irb.model.getpos;
 endJoint = deg2rad([0 -38 5 0 -40 0]);
 steps = 20;
 trajectory = jtraj(q,endJoint,steps);
 for i = 1:steps
-    robot.model.animate(trajectory(i,:)); % Animating the robot to move to the set joint configuratio
+    irb.model.animate(trajectory(i,:)); % Animating the robot to move to the set joint configuratio
     drawnow()
     pause(0.005);
 end
@@ -22,13 +23,13 @@ steps = 50;
 
 
 % 3.6
-q = robot.model.getpos;
-T1 = robot.model.fkine(q).T;       % First pose
+q = irb.model.getpos;
+T1 = irb.model.fkine(q).T;       % First pose
 
 % 3.3
 M = [1 1 1 zeros(1,3)];                         % Masking Matrix
 
-x1 = [robot.model.fkine(q).t(1) robot.model.fkine(q).t(2) robot.model.fkine(q).t(3)]';
+x1 = [irb.model.fkine(q).t(1) irb.model.fkine(q).t(2) irb.model.fkine(q).t(3)]';
 x2 = cupLocation';
 deltaT = 0.05;     % change in time between each step                                   % Discrete time step
 
@@ -46,13 +47,13 @@ qMatrix = nan(steps,6); % stores joint angles at each step
 % UPDATE: ikine function now has different syntax when entering
 % arguments into the function call. The argument must be prefaced by
 % its argument name. E.g. Initial Q Guess = 'q0', q & Mask = 'mask', m.
-qMatrix(1,:) = robot.model.ikine(T1, 'q0', [0 0 0 0 0 0], 'mask', M);   % sets the inital joint angle              % Solve for joint angles
+qMatrix(1,:) = irb.model.ikine(T1, 'q0', q, 'mask', M);   % sets the inital joint angle              % Solve for joint angles
 
 % 3.10
 for i = 1:steps-1
     xdot = (x(:,i+1) - x(:,i))/deltaT;   % calculates velocity at each position by getting change between next and current position and dividing by time step                          % Calculate velocity at discrete time step
     xdot = [xdot' 0 0 0];
-    J = robot.model.jacob0(qMatrix(i,:));            % Get the Jacobian at the current state
+    J = irb.model.jacob0(qMatrix(i,:));            % Get the Jacobian at the current state
     J = J(1:6,:);                           % Take only first 2 rows
     qdot = inv(J)*xdot'; % change in joint angles   (velocity of joint angles)                         % Solve velocitities via RMRC
     qMatrix(i+1,:) =  qMatrix(i,:) + deltaT*qdot';                   % Update next joint state
@@ -60,20 +61,20 @@ end
 
 % robot.model.plot(qMatrix,'trail','r-');
 for i = 1:steps
-    robot.model.animate(qMatrix(i,:)); % Animating the robot to move to the set joint configuratio
+    irb.model.animate(qMatrix(i,:)); % Animating the robot to move to the set joint configuratio
     drawnow()
     pause(0.005);
 end
 
 % fix angle
-q = robot.model.getpos;
+q = irb.model.getpos;
 angleDiff = -90-rad2deg(q(2))-rad2deg(q(3))-rad2deg(q(5));
 qEnd = q;
 qEnd(5) = qEnd(5) + deg2rad(angleDiff);
 qEnd(4) = 0;
 trajectory = jtraj(q,qEnd,steps);
 for i = 1:steps
-    robot.model.animate(trajectory(i,:)); % Animating the robot to move to the set joint configuratio
+    irb.model.animate(trajectory(i,:)); % Animating the robot to move to the set joint configuratio
     drawnow()
     pause(0.005);
 end
@@ -83,14 +84,13 @@ steps = 50;
 
 
 % 3.6
-q = robot.model.getpos;
-T1 = robot.model.fkine(q).T;       % First pose
-T2 = [eye(3) [0.62, 0, -0.15]'; zeros(1,3) 1];      % Second pose
+q = irb.model.getpos;
+T1 = irb.model.fkine(q).T;       % First pose
 
 % 3.3
 M = [1 1 1 zeros(1,3)];                         % Masking Matrix
 
-x1 = [robot.model.fkine(q).t(1) robot.model.fkine(q).t(2) robot.model.fkine(q).t(3)]';
+x1 = [irb.model.fkine(q).t(1) irb.model.fkine(q).t(2) irb.model.fkine(q).t(3)]';
 x2 = toppingsLocation';
 deltaT = 0.05;     % change in time between each step                                   % Discrete time step
 
@@ -108,13 +108,13 @@ qMatrix = nan(steps,6); % stores joint angles at each step
 % UPDATE: ikine function now has different syntax when entering
 % arguments into the function call. The argument must be prefaced by
 % its argument name. E.g. Initial Q Guess = 'q0', q & Mask = 'mask', m.
-qMatrix(1,:) = robot.model.ikine(T1, 'q0', [0 0 0 0 0 0], 'mask', M);   % sets the inital joint angle              % Solve for joint angles
+qMatrix(1,:) = irb.model.ikine(T1, 'q0', q, 'mask', M);   % sets the inital joint angle              % Solve for joint angles
 
 % 3.10
 for i = 1:steps-1
     xdot = (x(:,i+1) - x(:,i))/deltaT;   % calculates velocity at each position by getting change between next and current position and dividing by time step                          % Calculate velocity at discrete time step
     xdot = [xdot' 0 0 0];
-    J = robot.model.jacob0(qMatrix(i,:));            % Get the Jacobian at the current state
+    J = irb.model.jacob0(qMatrix(i,:));            % Get the Jacobian at the current state
     J = J(1:6,:);                           % Take only first 2 rows
     qdot = inv(J)*xdot'; % change in joint angles   (velocity of joint angles)                         % Solve velocitities via RMRC
     qMatrix(i+1,:) =  qMatrix(i,:) + deltaT*qdot';                   % Update next joint state
@@ -122,20 +122,20 @@ end
 
 % robot.model.plot(qMatrix,'trail','r-');
 for i = 1:steps
-    robot.model.animate(qMatrix(i,:)); % Animating the robot to move to the set joint configuratio
+    irb.model.animate(qMatrix(i,:)); % Animating the robot to move to the set joint configuratio
     drawnow()
     pause(0.005);
 end
 
 % fix angle
-q = robot.model.getpos;
+q = irb.model.getpos;
 angleDiff = -90-rad2deg(q(2))-rad2deg(q(3))-rad2deg(q(5));
 qEnd = q;
 qEnd(5) = qEnd(5) + deg2rad(angleDiff);
 qEnd(4) = 0;
 trajectory = jtraj(q,qEnd,steps);
 for i = 1:steps
-    robot.model.animate(trajectory(i,:)); % Animating the robot to move to the set joint configuratio
+    irb.model.animate(trajectory(i,:)); % Animating the robot to move to the set joint configuratio
     drawnow()
     pause(0.005);
 end
@@ -143,8 +143,8 @@ end
 
 
 %% Toppings pickup
-q = robot.model.getpos;
-endPos = robot.model.fkine(q);
+q = irb.model.getpos;
+endPos = irb.model.fkine(q);
 totalToppings = 10;
 distance = 0.15;
 increments = 0.02;
@@ -168,8 +168,8 @@ for i = totalToppings:-1:1
 end
 
 %% Toppings dispense
-q = robot.model.getpos;
-endPos = robot.model.fkine(q);
+q = irb.model.getpos;
+endPos = irb.model.fkine(q);
 totalToppings = 10;
 distance = 0.15;
 increments = 0.02;
