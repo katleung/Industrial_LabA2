@@ -10,11 +10,11 @@ classdef runSimulation < handle
         cupStatus = zeros(1,1);                 % Initialise all cup statuses to 0 (empty)
         cupEndLoc = zeros(1,3);                 % Initialise all cup endLocations with zeros
         cupID = {};                             % Initialise empty cell array to store cup handles (so that they can be deleted later)
-        cupFillLoc = [0.231, 0.333, 0.453];     % Set filling location for cup
+        cupFillLoc = [0.4, -0.19, 0.518];     % Set filling location for cup
         cupResetLoc = [0.231, 0.333, 0.453];    % Set reset location for cupbot to avoid hitting the next cup
         armToCupOffset = 0.05; 
 
-        rotateEnd = [1 0 0; 0 -1 0; 0 0 -1]; % rotation matrix to make EE face downwards
+        rotateEnd = [1 0 0; 0 0 -1; 0 1 0]; % rotation matrix to make EE face downwards
 
         closedGrip = deg2rad([-27.6, -14.1,-5.88]);         % Set pose for closed gripper position
         openGrip = deg2rad([-10 -10 0]);                    % Set pose for open gripper position
@@ -42,7 +42,7 @@ classdef runSimulation < handle
 
             %load bricks/cups
             [self.cupID, self.cupStartLoc] = self.loadCups(self); % For testing within the class, without starterScript
-            self.cupEndLoc = self.cupEndLocationSet(self)
+            self.cupEndLoc = self.cupEndLocationSet(self);
 
             %buildwall
             self.buildWall(self);
@@ -63,7 +63,7 @@ classdef runSimulation < handle
             % cupID = cell(1, 1);
             cupStartLoc(1,:) = [-0.023, 0.569, 0.253];
             % cupStartLoc(1,:) = [0.160, -0.505, 0.296];
-            % cupStartLoc(3,:) = [-0.023, 0.569, 0.253];
+            cupStartLoc(1,:) = [0.2727, 0.4374, 0.2503];
             
             for n = 1:height(cupStartLoc) % for number of rows in cup array
                 updateLoc = transl(cupStartLoc(n,:)) * self.baseTr;
@@ -88,31 +88,56 @@ classdef runSimulation < handle
         %% Move Cup (build wall)
         function buildWall(self)
             % Set the initial joint angles to the current robot position
-            q = self.cupbot.model.getpos()
-            q= deg2rad([20,1,20,1,0,0])
-        
+            q = self.cupbot.model.getpos();
+            offsetPose = transl(-self.armToCupOffset, 0, 0)* trotx(pi);
+            offsetWaypoint = transl(-self.armToCupOffset, 0, 0.2)* trotx(pi);
+
             for i = 1:height(self.cupID)
+                self.cupStatus(i) = 0;
                 while self.cupStatus(i) <4
-                    if self.cupStatus(i) == 0 %move to cup start location, close gripper
-                        goalMatrix = rt2tr(self.rotateEnd, self.cupStartLoc(i,:)');
-                        goalQ = self.cupbot.model.ikine(goalMatrix, 'q0', q, 'mask', [1,1,1,0,0,0]);
+                    if self.cupStatus(i) == -1
+                        goalQ = deg2rad([-90,-45,45,-90,90,0]);
                         goalPos = self.cupbot.model.fkine(goalQ).T;
                         self.moveCupbotNOCup(self,goalQ,self.jtrajStepCount);
+                    elseif self.cupStatus(i) == 0 % move to cup start location, close gripper
+                        % move to waypoint above cup
+                        goalQ = self.cupbot.model.ikine(transl(self.cupStartLoc(i,:))*offsetWaypoint, 'q0', q, 'mask', [1,1,1,0,0,0]);
+                        goalPos = self.cupbot.model.fkine(goalQ).T;
+                        self.moveCupbotNOCup(self,goalQ,self.jtrajStepCount);
+                        % move down to cup 
+                        goalMatrix = rt2tr(self.rotateEnd, self.cupStartLoc(i,:)');
+                        goalQ = self.cupbot.model.ikine(transl(self.cupStartLoc(i,:))*offsetPose, 'q0', q, 'mask', [1,1,1,0,0,0]);
+                        goalPos = self.cupbot.model.fkine(goalQ).T
+                        self.moveCupbotNOCup(self,goalQ,self.jtrajStepCount);
                         self.moveFingers(self, 0, 20);
-                    elseif self.cupStatus(i) == 1 %move cup to fill location, keep gripper closed
+                    elseif self.cupStatus(i) == 1 % move cup to fill location, keep gripper closed
+                        % move to waypoint above cup
+                        goalQ = self.cupbot.model.ikine(transl(self.cupStartLoc(i,:))*offsetWaypoint, 'q0', q, 'mask', [1,1,1,0,0,0])
+                        goalPos = self.cupbot.model.fkine(goalQ).T;
+                        self.moveCupbotWITHCup(self,i,goalQ,self.jtrajStepCount);
+                        % move to fill location
                         goalMatrix = rt2tr(self.rotateEnd, self.cupFillLoc(1,:)');       % there should only be one fill loc. 
-                        goalQ = self.cupbot.model.ikine(goalMatrix, 'q0', q, 'mask', [1,1,1,0,0,0]);
+                        goalQ = self.cupbot.model.ikine(transl(self.cupFillLoc(i,:))*offsetPose, 'q0', q, 'mask', [1,1,1,0,0,0]);
                         goalPos = self.cupbot.model.fkine(goalQ).T;
                         self.moveCupbotWITHCup(self,i,goalQ,self.jtrajStepCount);
                     elseif self.cupStatus(i) == 2 %move cup to end location, open gripper
+                        % move to waypoint above cup
+                        goalQ = self.cupbot.model.ikine(transl(self.cupEndLoc(i,:))*offsetWaypoint, 'q0', q, 'mask', [1,1,1,0,0,0]);
+                        goalPos = self.cupbot.model.fkine(goalQ).T;
+                        self.moveCupbotWITHCup(self,i,goalQ,self.jtrajStepCount);
+                        % move down to end location
                         goalMatrix = rt2tr(self.rotateEnd, self.cupEndLoc(i,:)');
-                        goalQ = self.cupbot.model.ikine(goalMatrix, 'q0', q, 'mask', [1,1,1,0,0,0]);
+                        goalQ = self.cupbot.model.ikine(transl(self.cupEndLoc(i,:))*offsetPose, 'q0', q, 'mask', [1,1,1,0,0,0]);
                         goalPos = self.cupbot.model.fkine(goalQ).T;
                         self.moveCupbotWITHCup(self,i,goalQ,self.jtrajStepCount);
                         self.moveFingers(self, 1, 20);
+                        % move to waypoint above cup
+                        goalQ = self.cupbot.model.ikine(transl(self.cupEndLoc(i,:))*offsetWaypoint, 'q0', q, 'mask', [1,1,1,0,0,0]);
+                        goalPos = self.cupbot.model.fkine(goalQ).T;
+                        self.moveCupbotNOCup(self,goalQ,self.jtrajStepCount);
                     elseif self.cupStatus(i) == 3 %move arm without cup to reset position, keep gripper open
                         goalMatrix = rt2tr(self.rotateEnd, self.cupResetLoc(1,:)');
-                        goalQ = self.cupbot.model.ikine(goalMatrix, 'q0', q, 'mask', [1,1,1,0,0,0]);
+                        goalQ = self.cupbot.model.ikine(transl(self.cupResetLoc(i,:))*offsetPose, 'q0', q, 'mask', [1,1,1,0,0,0]);
                         goalPos = self.cupbot.model.fkine(goalQ).T;
                         self.moveCupbotNOCup(self,goalQ,self.jtrajStepCount);
                     end
@@ -158,8 +183,8 @@ classdef runSimulation < handle
                 catch 
                 end
 
-                cupPos = trEnd * transl(0,0,self.armToCupOffset);
-                self.cupID{iD} = PlaceObject('HalfSizedRedGreenBrick.ply', cupPos(1:3, 4)');
+                cupPos = trEnd;
+                self.cupID{iD} = PlaceObject('HalfSizedRedGreenBrick.ply', cupPos(1:3, 4)'+ [self.armToCupOffset, 0, 0]);
 
                 drawnow();
                 pause(0.005);
@@ -184,17 +209,68 @@ classdef runSimulation < handle
         end
 
         %% Transform whole gripper
-        function transformGripper(self)
-            startTr1 = self.gripper{1}.model.fkine(self.gripper{1}.model.getpos()).T; % current position of gripper base
-            endTr1 = self.cupbot.model.fkine(self.cupbot.model.getpos()).T * trotx(pi/2); % current position of robot end-effector (i.e. goal position for gripper 1)
-            trPath1 = ctraj(startTr1, endTr1, 2); % Use ctraj to define a trajectory that accounts for translation as well from startTr1 to endTr1
+        % function transformGripper(self)
+        %     % Assuming goalMatrix is the transformation matrix for the end effector pose
+        %         cupbotPose = self.cupbot.model.fkine(self.cupbot.model.getpos()).T;
+        %         endEffectorRotation = cupbotPose(1:3, 1:3); % Extract the rotation matrix
+        %         endEffectorZAxis = endEffectorRotation(:, 3); % The Z-axis of the end effector frame
+        %         globalZNormal = [0; 1; 0];
+        %         % Calculate the angle between the two vectors (Z-axes)
+        %         angleRadians = acos(dot(endEffectorZAxis, globalZNormal));
+        %         rotationAxis = cross(endEffectorZAxis, globalZNormal)
+        %         % Convert the angle from radians to degrees
+        %         angleDegrees = rad2deg(angleRadians);
+        %         % Determine the direction of rotation (clockwise or counterclockwise)
+        %         if rotationAxis(3) < 0
+        %             angleRadians = -angleRadians;
+        %         end
+        % 
+        %     startTr1 = self.gripper{1}.model.fkine(self.gripper{1}.model.getpos()).T; % current position of gripper base
+        %     endTr1 = self.cupbot.model.fkine(self.cupbot.model.getpos()).T * trotx(pi/2)* troty(-angleRadians); % current position of robot end-effector (i.e. goal position for gripper 1)
+        %     trPath1 = ctraj(startTr1, endTr1, 2); % Use ctraj to define a trajectory that accounts for translation as well from startTr1 to endTr1
+        % 
+        %     % Calculate the new endTr2 based on endTr1 rotated by troty(pi)
+        %     endTr2 = endTr1 * troty(pi); % goal position of gripper 2 is the same as gripper 1 but rotated about y to mirror the finger
+        %     trPath2 = ctraj(startTr1, endTr2, 2);  % Use ctraj to define a trajectory that accounts for translation as well from startTr1 to endTr2
+        %     for i = 1:size(trPath1, 3)
+        %         % % Animate gripper{1} from startTr1 to endTr1
+        %         self.gripper{1}.model.base = trPath1(:, :, i);
+        %         self.gripper{1}.model.animate(self.gripper{1}.model.getpos);
+        %         % Animate gripper{2} from startTr1 to endTr2
+        %         self.gripper{2}.model.base = trPath2(:, :, i);
+        %         self.gripper{2}.model.animate(self.gripper{2}.model.getpos);
+        %     end
+        % end
 
+        function transformGripper(self)
+            % Assuming goalMatrix is the transformation matrix for the end effector pose
+            cupbotPose = self.cupbot.model.fkine(self.cupbot.model.getpos()).T;        
+            endEffectorYAxis = cupbotPose(1:3, 2);  % Extract the Y-axis
+            globalYAxis = [0, 1, 0];
+            % Calculate the dot product (angle between the normal vectors)
+            dotProduct = dot(endEffectorYAxis, globalYAxis);
+            % Calculate the magnitudes (lengths) of the normal vectors
+            magnitude1 = norm(endEffectorYAxis);
+            magnitude2 = norm(globalYAxis);
+            % Calculate the angle between the planes
+            angleRadians = acos(dotProduct / (magnitude1 * magnitude2));
+                
+            % Calculate the desired gripper orientation using the calculated angle
+            gripperOrientation = eye(4);
+            gripperOrientation(1:3,1:3) = rpy2r(0, angleRadians-pi/2, 0);
+            gripperOrientation(1:3, 4) = [0; 0; 0];
+
+            % Animate the gripper to the desired orientation
+            startTr1 = self.gripper{1}.model.fkine(self.gripper{1}.model.getpos()).T; % current position of gripper base
+            endTr1 = self.cupbot.model.fkine(self.cupbot.model.getpos()).T * trotx(pi/2) * gripperOrientation;
+            trPath1 = ctraj(startTr1, endTr1, 2); % Use ctraj to define a trajectory that accounts for translation as well from startTr1 to endTr1
+        
             % Calculate the new endTr2 based on endTr1 rotated by troty(pi)
             endTr2 = endTr1 * troty(pi); % goal position of gripper 2 is the same as gripper 1 but rotated about y to mirror the finger
             trPath2 = ctraj(startTr1, endTr2, 2);  % Use ctraj to define a trajectory that accounts for translation as well from startTr1 to endTr2
-
+        
             for i = 1:size(trPath1, 3)
-                % % Animate gripper{1} from startTr1 to endTr1
+                % Animate gripper{1} from startTr1 to endTr1
                 self.gripper{1}.model.base = trPath1(:, :, i);
                 self.gripper{1}.model.animate(self.gripper{1}.model.getpos);
                 % Animate gripper{2} from startTr1 to endTr2
