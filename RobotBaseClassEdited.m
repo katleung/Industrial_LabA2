@@ -201,7 +201,7 @@ classdef RobotBaseClassEdited < handle
             
             roughMinMax = sum(abs(self.model.d) + abs(self.model.a));
             % self.workspace = [-roughMinMax roughMinMax -roughMinMax roughMinMax -roughMinMax roughMinMax]; 
-            self.workspace = [-1 1 -1 1 -0.5 1]; %% SET THE WORKSPACE SIZE HERE!!!
+            self.workspace = [-2 2 -2 2 -0.5 1]; %% SET THE WORKSPACE SIZE HERE!!!
 
 
             self.model.plot3d(self.homeQ,'noarrow','nowrist','workspace',self.workspace,'view',[ax,by]);%,'notiles');            
