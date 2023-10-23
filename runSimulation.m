@@ -35,6 +35,7 @@ classdef runSimulation < handle
             end
             
             %load in the robot
+
             self.cupbot = teaUR3(self.baseTr);
             self.irb = IRB1200(self.irbOffset);
             self.gripper{1} = gripper(self.cupbot.model.fkine(self.cupbot.model.getpos()).T * trotx(pi/2));
@@ -71,11 +72,12 @@ classdef runSimulation < handle
         %% Loading the Environment
          function LoadEnviro(self)
             % load in surface texture for concrete floor
-            surf([-1.5,-1.5;1.5,1.5],[-1.5,1.5;-1.5,1.5],[-0.3,-0.3;-0.3,-0.3],'CData',imread('Models\marble.jpg'),'FaceColor','texturemap');    %Load concrete floor
+            surf([-4,-4;4,4],[-4,4;-4,4],[0,0;0,0],'CData',imread('Models\marble.jpg'),'FaceColor','texturemap');    %Load concrete floor
             hold on;
-            PlaceObject('Models\bowl.ply', [0.95,-1.022,-0.1]);
+            PlaceObject('Models\bowl.ply', [0.95,-0.9,0]);
             hold on;
-            
+            SafetySystem.ActivateAll; 
+            PlaceObject('Models\CoffeeTable.ply',[0.6, 0.3, 0]);
 
 
          
