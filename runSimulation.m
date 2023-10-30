@@ -13,7 +13,7 @@ classdef runSimulation < handle
         cupStatus = zeros(1,1);                 % Initialise all cup statuses to 0 (empty)
         cupEndLoc = zeros(1,3);                 % Initialise all cup endLocations with zeros
         cupID = {};                             % Initialise empty cell array to store cup handles (so that they can be deleted later)
-        cupFillLoc = [0.4, -0.19, 0.518];     % Set filling location for cup
+        cupFillLoc = [0.4, -0.18, 0.518];     % Set filling location for cup
         irbCupFillLoc = [0.35, -0.19, 0.647];
         cupResetLoc = [0.231, 0.333, 0.453];    % Set reset location for cupbot to avoid hitting the next cup
         armToCupOffset = 0.05; 
@@ -35,6 +35,7 @@ classdef runSimulation < handle
             end
             
             %load in the robot
+
             self.cupbot = teaUR3(self.baseTr);
             self.irb = IRB1200(self.irbOffset);
             self.gripper{1} = gripper(self.cupbot.model.fkine(self.cupbot.model.getpos()).T * trotx(pi/2));
@@ -71,10 +72,15 @@ classdef runSimulation < handle
         %% Loading the Environment
          function LoadEnviro(self)
             % load in surface texture for concrete floor
-            surf([-1.5,-1.5;1.5,1.5],[-1.5,1.5;-1.5,1.5],[-0.3,-0.3;-0.3,-0.3],'CData',imread('Models\marble.jpg'),'FaceColor','texturemap');    %Load concrete floor
+            surf([-4,-4;4,4],[-4,4;-4,4],[-0.152,-0.152;-0.152,-0.152],'CData',imread('Models\marble.jpg'),'FaceColor','texturemap');    %Load concrete floor
             hold on;
-            PlaceObject('Models\bowl.ply', [0.95,-1.022,-0.1]);
+            PlaceObject('Models\bowl.ply', [0.95,-0.9,0]);
             hold on;
+            SafetySystem.ActivateAll; 
+            PlaceObject('Models\CoffeeTable2.ply',[0.6, 0.3, -0.152]);
+            PlaceObject('Models\CoffeeTable3.ply',[0.95,-0.9, -0.152]);
+            PlaceObject('Models\mount3.ply',[0, 0, 0]);
+            PlaceObject('Models\mount4.ply',[0.95,-0.323,0.1913-0.152]);
             
 
 

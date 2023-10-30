@@ -90,6 +90,7 @@ T1 = irb.model.fkine(q).T;       % First pose
 % 3.3
 M = [1 1 1 zeros(1,3)];                         % Masking Matrix
 
+
 x1 = [irb.model.fkine(q).t(1) irb.model.fkine(q).t(2) irb.model.fkine(q).t(3)]';
 x2 = toppingsLocation';
 deltaT = 0.05;     % change in time between each step                                   % Discrete time step
@@ -103,6 +104,8 @@ end
 
 % 3.8
 qMatrix = nan(steps,6); % stores joint angles at each step
+
+%SimEStop();
 
 % 3.9
 % UPDATE: ikine function now has different syntax when entering

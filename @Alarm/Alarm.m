@@ -7,7 +7,7 @@ classdef Alarm
     methods
         function self = Alarm(position)
             % read ply file for vertex data
-            [f,v,data] = plyread('fenceAssemblyGreenRectangleModified.ply','tri');
+            [f,v,data] = plyread('FireAlarm.ply','tri');
 
             % Scale the colours to be 0-to-1 (they are originally 0-to-255
             vertexColours = [data.vertex.red, data.vertex.green, data.vertex.blue] / 255;
