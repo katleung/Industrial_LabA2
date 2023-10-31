@@ -1,4 +1,4 @@
-classdef Siren
+classdef Sign
 
     properties
         handle;
@@ -6,9 +6,9 @@ classdef Siren
     end
     
     methods
-        function self = Siren(position)
+        function self = Sign(position)
             % read ply file for vertex data
-            [f,v,data] = plyread('Siren.ply','tri');
+            [f,v,data] = plyread('fenceAssemblyGreenRectangleModified.ply','tri');
 
             % Scale the colours to be 0-to-1 (they are originally 0-to-255
             vertexColours = [data.vertex.red, data.vertex.green, data.vertex.blue] / 255;

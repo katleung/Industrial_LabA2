@@ -17,7 +17,7 @@ classdef IRB1200 < RobotBaseClassEdited
             self.model.base = self.model.base.T * baseTr; % Edit this line to change the location of the robot
 
             self.PlotAndColourRobot(); % Plotting the robot
-            self.model.teach;
+            % self.model.teach;
 
         end
 

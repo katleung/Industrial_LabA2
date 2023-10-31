@@ -13,7 +13,7 @@ classdef runSimulation < handle
         cupStatus = zeros(1,1);                 % Initialise all cup statuses to 0 (empty)
         cupEndLoc = zeros(1,3);                 % Initialise all cup endLocations with zeros
         cupID = {};                             % Initialise empty cell array to store cup handles (so that they can be deleted later)
-        cupFillLoc = [0.4, -0.19, 0.518];     % Set filling location for cup
+        cupFillLoc = [0.4, -0.18, 0.518];     % Set filling location for cup
         irbCupFillLoc = [0.35, -0.19, 0.647];
         cupResetLoc = [0.231, 0.333, 0.453];    % Set reset location for cupbot to avoid hitting the next cup
         armToCupOffset = 0.05; 
@@ -22,7 +22,8 @@ classdef runSimulation < handle
 
         closedGrip = deg2rad([-27.6, -14.1,-5.88]);         % Set pose for closed gripper position
         openGrip = deg2rad([-10 -10 0]);                    % Set pose for open gripper position
-
+        
+        robotApp;
         Arduino;
     end
 
@@ -34,11 +35,16 @@ classdef runSimulation < handle
                 self.baseTr = self.baseTr * baseTransform; %apply transformation if provided
             end
             
+        % set up arduino comms
+            self.Arduino = serialport('COM5', 9600);
+            fopen(self.Arduino);
+
             %load in the robot
-            self.cupbot = teaUR3(self.baseTr);
-            self.irb = IRB1200(self.irbOffset);
-            self.gripper{1} = gripper(self.cupbot.model.fkine(self.cupbot.model.getpos()).T * trotx(pi/2));
-            self.gripper{2} = gripper(self.cupbot.model.fkine(self.cupbot.model.getpos()).T * trotx(pi/2) * troty(pi));
+            self.robotApp = robotGUI();
+            self.cupbot = self.robotApp.ur3robot;
+            self.irb = self.robotApp.irb;
+            self.gripper{1} = self.robotApp.ur3Gripper{1};
+            self.gripper{2} = self.robotApp.ur3Gripper{2};
             self.gripper{1}.model.animate(self.openGrip); 
             self.gripper{2}.model.animate(self.openGrip);
             self.moveFingers(self, 1, 20);
@@ -58,27 +64,33 @@ classdef runSimulation < handle
             %load bricks/cups
             [self.cupID, self.cupStartLoc] = self.loadCups(self); % For testing within the class, without starterScript
             self.cupEndLoc = self.cupEndLocationSet(self);
-            
+
             %load in environment
             self.LoadEnviro(self);
 
             %buildwall
             self.buildWall(self);
 
-            
+        % close arduino
+            delete(self.Arduino);
+            clear all;
+            close all;
+
         end
         
         %% Loading the Environment
          function LoadEnviro(self)
             % load in surface texture for concrete floor
-            surf([-1.5,-1.5;1.5,1.5],[-1.5,1.5;-1.5,1.5],[-0.3,-0.3;-0.3,-0.3],'CData',imread('Models\marble.jpg'),'FaceColor','texturemap');    %Load concrete floor
+            surf([-4,-4;4,4],[-4,4;-4,4],[-0.152,-0.152;-0.152,-0.152],'CData',imread('Models\marble.jpg'),'FaceColor','texturemap');    %Load concrete floor
             hold on;
-            PlaceObject('Models\bowl.ply', [0.95,-1.022,-0.1]);
+            PlaceObject('Models\bowl.ply', [0.95,-0.9,0]);
             hold on;
+            SafetySystem.ActivateAll; 
+            PlaceObject('Models\CoffeeTable2.ply',[0.6, 0.3, -0.152]);
+            PlaceObject('Models\CoffeeTable3.ply',[0.95,-0.9, -0.152]);
+            PlaceObject('Models\mount3.ply',[0, 0, 0]);
+            PlaceObject('Models\mount4.ply',[0.95,-0.323,0.1913-0.152]);
             
-
-
-         
          end
 
         %% Generating Cup / Cups?
@@ -116,7 +128,7 @@ classdef runSimulation < handle
             q = self.cupbot.model.getpos();
             offsetPose = transl(-self.armToCupOffset, 0, 0)* trotx(pi);
             offsetWaypoint = transl(-self.armToCupOffset, 0, 0.2)* trotx(pi);
-            [m,n] = size(self.cupID)
+            [m,n] = size(self.cupID);
             for i = 1:n
                 self.cupStatus(i) = 0;
                 while self.cupStatus(i) <4
@@ -196,97 +208,152 @@ classdef runSimulation < handle
 
                 end
             end
-
+            self.robotApp.simFinished = true;
+            self.robotApp.UR3Joint1Slider.Enable = true;
+            self.robotApp.UR3Joint2Slider.Enable = true;
+            self.robotApp.UR3Joint3Slider.Enable = true;
+            self.robotApp.UR3Joint4Slider.Enable = true;
+            self.robotApp.UR3Joint5Slider.Enable = true;
+            self.robotApp.UR3Joint6Slider.Enable = true;
+            self.robotApp.UR3MOVEButton.Enable = true;
+            self.robotApp.IRBJoint1Slider.Enable = true;
+            self.robotApp.IRBJoint2Slider.Enable = true;
+            self.robotApp.IRBJoint3Slider.Enable = true;
+            self.robotApp.IRBJoint4Slider.Enable = true;
+            self.robotApp.IRBJoint5Slider.Enable = true;
+            self.robotApp.IRBJoint6Slider.Enable = true;
+            self.robotApp.IRBMOVEButton.Enable = true;
         end
 
         
 
         %% UR3 and IRB animation without cup
         function animateBothRobotsNoCup(self, ur3traj, irbTraj, stepCount)            
-            for i = 1:stepCount
-                self.irb.model.animate(irbTraj(i,:))
-                self.cupbot.model.animate(ur3traj(i,:)) % Animate the robot's movement
-                self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
-                drawnow();
-                pause(0.01);
+            i = 1;
+            while i <= stepCount
+                if strcmp(self.robotApp.systemState, 'running')
+                    self.irb.model.animate(irbTraj(i,:))
+                    self.cupbot.model.animate(ur3traj(i,:)) % Animate the robot's movement
+                    self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
+                    self.updateUR3GUI(self);
+                    self.updateIRBGUI(self);
+                    self.checkArduinoState(self); % check arduino inputs
+                    drawnow();
+                    pause(0.01);
+                    i = i+1;
+                else
+                    self.checkArduinoState(self); % check arduino input
+                    pause(0.01);
+                end
             end
         end
 
         %% UR3 and IRB animation with empty cups
         function animateBothRobotsEmptyCup(self, ur3traj, irbTraj, stepCount, iD)            
-            for i = 1:stepCount
-                self.irb.model.animate(irbTraj(i,:))
-                self.cupbot.model.animate(ur3traj(i,:)) % Animate the robot's movement
-                self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
-                
-                try 
-                    delete(self.cupID{iD}); 
-                catch 
+            i = 1;
+            while i <= stepCount
+                if strcmp(self.robotApp.systemState, 'running')
+                    self.irb.model.animate(irbTraj(i,:))
+                    self.cupbot.model.animate(ur3traj(i,:)) % Animate the robot's movement
+                    self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
+
+                    try
+                        delete(self.cupID{iD});
+                    catch
+                    end
+                    currentPose = self.cupbot.model.getpos(); % initialise a variable with the right number of joint values
+                    cupPos = self.cupbot.model.fkine(currentPose).T;
+                    self.cupID{iD} = PlaceObject('Models\cup2.ply', cupPos(1:3, 4)'+ [self.armToCupOffset, 0, 0]);
+                    self.updateUR3GUI(self);
+                    self.updateIRBGUI(self);
+                    self.checkArduinoState(self); % check arduino input
+                    drawnow();
+                    pause(0.01);
+                    i = i+1;
+                else
+                    self.checkArduinoState(self); % check arduino input
+                    pause(0.01);
                 end
-                currentPose = self.cupbot.model.getpos(); % initialise a variable with the right number of joint values
-                cupPos = self.cupbot.model.fkine(currentPose).T;
-                self.cupID{iD} = PlaceObject('Models\cup2.ply', cupPos(1:3, 4)'+ [self.armToCupOffset, 0, 0]);
-                drawnow();
-                pause(0.01);
             end
         end
 
-        %% UR3 and IRB animation with empty cups
-        function animateUR3(self, ur3traj, stepCount)            
-            for i = 1:stepCount
-                self.cupbot.model.animate(ur3traj(i,:)) % Animate the robot's movement
-                self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
-                drawnow();
-                pause(0.01);
-            end
-        end
-
-        %% UR3 and IRB animation with empty cups
-        function animateUR3WithCup(self, ur3traj, stepCount, iD)            
-            for i = 1:stepCount
-                self.cupbot.model.animate(ur3traj(i,:)) % Animate the robot's movement
-                self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
-                
-                try 
-                    delete(self.cupID{iD}); 
-                catch 
+        %% UR3 animation without cup
+        function animateUR3(self, ur3traj, stepCount)
+            i = 1;
+            while i <= stepCount
+                if strcmp(self.robotApp.systemState, 'running')
+                    self.cupbot.model.animate(ur3traj(i,:)) % Animate the robot's movement
+                    self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
+                    self.updateUR3GUI(self);
+                    self.updateIRBGUI(self);
+                    self.checkArduinoState(self); % check arduino input
+                    drawnow();
+                    pause(0.01);
+                    i = i+1;
+                else
+                    self.checkArduinoState(self); % check arduino input
+                    pause(0.01);
                 end
-                currentPose = self.cupbot.model.getpos(); % initialise a variable with the right number of joint values
-                cupPos = self.cupbot.model.fkine(currentPose).T;
-                self.cupID{iD} = PlaceObject('Models\cup2.ply', cupPos(1:3, 4)'+ [self.armToCupOffset, 0, 0]);
-                drawnow();
-                pause(0.01);
-                drawnow();
-                pause(0.01);
             end
         end
 
+        %% UR3 animation with empty cups
+        function animateUR3WithCup(self, ur3traj, stepCount, iD)
+            i = 1;
+            while i <= stepCount
+                if strcmp(self.robotApp.systemState, 'running')
+                    self.cupbot.model.animate(ur3traj(i,:)) % Animate the robot's movement
+                    self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
 
-        %% Move UR3 with cup
-        function moveCupbotWITHCup(self, iD, goal, stepCount)
-            currentPose = self.cupbot.model.getpos(); % initialise a variable with the right number of joint values
-            steps = jtraj(self.cupbot.model.getpos(), goal, stepCount);
-            
-            for j = 1:stepCount
-                currentPose = self.cupbot.model.getpos(); % initialise a variable with the right number of joint values
-                trEnd = self.cupbot.model.fkine(currentPose).T;
-                currentPose(1:3) = steps(j, 1:3); % Only update the position part of the pose
-                self.cupbot.model.animate(currentPose) % Animate the robot's movement
-                self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
-
-                try 
-                    delete(self.cupID{iD}); 
-                catch 
+                    try
+                        delete(self.cupID{iD});
+                    catch
+                    end
+                    currentPose = self.cupbot.model.getpos(); % initialise a variable with the right number of joint values
+                    cupPos = self.cupbot.model.fkine(currentPose).T;
+                    self.cupID{iD} = PlaceObject('Models\cup2.ply', cupPos(1:3, 4)'+ [self.armToCupOffset, 0, 0]);
+                    self.updateUR3GUI(self);
+                    self.updateIRBGUI(self);
+                    self.checkArduinoState(self); % check arduino input
+                    drawnow();
+                    pause(0.01);
+                    i = i+1;
+                else
+                    self.checkArduinoState(self); % check arduino input
+                    pause(0.01);
                 end
-
-                cupPos = trEnd;
-                self.cupID{iD} = PlaceObject('Models\cup2.ply', cupPos(1:3, 4)'+ [self.armToCupOffset, 0, 0]);
-
-                drawnow();
-                pause(0.005);
             end
-
         end
+
+
+        % %% Move UR3 with cup
+        % function moveCupbotWITHCup(self, iD, goal, stepCount)
+        %     steps = jtraj(self.cupbot.model.getpos(), goal, stepCount);
+        % 
+        %     i = 1;
+        %     while i <= stepCount
+        %         if strcmp(self.robotApp.systemState, 'running')
+        %             currentPose = self.cupbot.model.getpos(); % initialise a variable with the right number of joint values
+        %             trEnd = self.cupbot.model.fkine(currentPose).T;
+        %             currentPose(1:3) = steps(i, 1:3); % Only update the position part of the pose
+        %             self.cupbot.model.animate(currentPose) % Animate the robot's movement
+        %             self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
+        % 
+        %             try
+        %                 delete(self.cupID{iD});
+        %             catch
+        %             end
+        % 
+        %             cupPos = trEnd;
+        %             self.cupID{iD} = PlaceObject('Models\cup2.ply', cupPos(1:3, 4)'+ [self.armToCupOffset, 0, 0]);
+        % 
+        %             drawnow();
+        %             pause(0.005);
+        %             i = i+1;
+        %         end
+        %     end
+        % 
+        % end
 
         %% Move gripper fingers
         function moveFingers(self, state, stepCount)
@@ -304,7 +371,7 @@ classdef runSimulation < handle
             end
         end
 
- %%
+ %% Move gripper position
 
         function transformGripper(self)
             % Assuming goalMatrix is the transformation matrix for the end effector pose
@@ -343,22 +410,57 @@ classdef runSimulation < handle
             end
         end
 
-        % %% Read Arduino Data
-        % function receivedData = readDataFromArduino(self)
-        %     % Read data from the Arduino
-        %     if self.Arduino.BytesAvailable > 0
-        %         receivedData = fscanf(self.Arduino, '%d');
-        %     else
-        %         receivedData = NaN; % Return a default value if no data is available
-        %     end
-        % end
-        % 
-        % %% Write to Arduino
-        % function sendDataToArduino(self, data)
-        %     % Send data to the Arduino
-        %     fprintf(self.Arduino, '%d', data);
-        % end
-        %% 
+        %% Read Arduino Data
+        function receivedData = readDataFromArduino(self)
+            % % Read data from the Arduino
+            % if self.Arduino.BytesAvailable > 0
+            %     receivedData = fscanf(self.Arduino, '%d');
+            % else
+            %     receivedData = NaN; % Return a default value if no data is available
+            % end
+
+            % Attempt to read data from the Arduino
+            try
+                receivedData = fscanf(self.Arduino, '%d');
+            catch
+                % fprintf('No data from Arduino.\n');
+            end
+        end
+
+        %% Write to Arduino
+        function sendDataToArduino(self, data)
+            % Send data to the Arduino
+            fprintf(self.Arduino, '%d', data);
+        end
+
+        %% EStop State Check
+        function checkArduinoState(self)
+            guiState = self.robotApp.guiEstopStatus;
+            % guiState = 'unlinked'; % comment this line out if you want to link arduino estop to gui estop
+            if strcmp(guiState, 'eStopped') % if gui release button has been pressed
+                self.sendDataToArduino(self, 4); % set arduino to 1 = estop state
+            end
+
+            flush(self.Arduino);            
+            state = self.readDataFromArduino(self)
+            if state == 1 % e-Stop button has been pressed on Arduino
+                if strcmp(guiState, 'released') % if gui release button has been pressed
+                    self.sendDataToArduino(self, 5); % set arduino to 2 = released state
+                end
+                self.robotApp.updateEStop(); % activate estop function
+            elseif state == 2 % release button has been pressed on arduino
+                if strcmp(guiState, 'confirmed') % if gui confirm button has been pressed 
+                    self.sendDataToArduino(self, 6); % reset arduino state to 3 = confirm state
+                end
+                self.robotApp.updateEStopRelease(); % activate release function
+            elseif state == 3 % confirm button has been pressed on arduino
+                self.sendDataToArduino(self, 7); % reset arduino state to 0 = running
+                self.robotApp.updateEStopConfirmed(); % activate confirmed function
+            end
+            % pause(0.05);
+        end
+
+        %% RMRC function
         function qMatrix = rmrc(self, startQ, endPos, steps, robot)
             T1 = robot.model.fkine(startQ).T;
 
@@ -390,7 +492,6 @@ classdef runSimulation < handle
                 qMatrix(i+1,:) =  qMatrix(i,:) + deltaT*qdot';                   % Update next joint state
             end
         end
-
         
         %% Toppings dispense
         function dispenseToppings(self)
@@ -444,6 +545,30 @@ classdef runSimulation < handle
                 end
                 pause(0.1);
             end
+        end
+
+        %% Update GUI UR3
+        function updateUR3GUI(self)
+            % Update joint values
+            q = self.cupbot.model.getpos;
+            for i = 1:6
+                self.robotApp.qUR3(i) = q(i);
+            end
+            
+            % Update xyzrpy display
+            self.robotApp.UpdateUR3Pose();
+        end
+
+        %% Update GUI UR3
+        function updateIRBGUI(self)
+            % Update joint values
+            q = self.irb.model.getpos;
+            for i = 1:6
+                self.robotApp.qIRB(i) = q(i);
+            end
+            
+            % Update xyzrpy display
+            self.robotApp.UpdateIRBPose();
         end
     end
 end

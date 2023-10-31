@@ -2,6 +2,7 @@ classdef Fence
 
     properties
         handle;
+       
     end
     
     methods
@@ -16,6 +17,8 @@ classdef Fence
             self.handle = trisurf(f ...
                 , v(:,1)+position(1,4), v(:,2)+position(2,4), v(:,3)+position(3,4) ...
                 ,'FaceVertexCData',vertexColours,'EdgeColor','interp','EdgeLighting','flat');
+
+
         end
     end
 end
