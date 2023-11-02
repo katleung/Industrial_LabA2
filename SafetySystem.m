@@ -34,7 +34,7 @@ classdef SafetySystem
             if nargin < 1
                 position = SafetySystem.defaultFencePosition;
             end
-            [f,v,data] = plyread('fenceAssemblyGreenRectangleModified.ply','tri');
+            [f,v,data] = plyread('Models\fenceAssemblyGreenRectangleModified.ply','tri');
             vertexColours = [data.vertex.red, data.vertex.green, data.vertex.blue] / 255;
             handle = trisurf(f, v(:,1)+position(1,4), v(:,2)+position(2,4), v(:,3)+position(3,4),...
                 'FaceVertexCData',vertexColours,'EdgeColor','interp','EdgeLighting','flat');
@@ -45,7 +45,7 @@ classdef SafetySystem
             if nargin < 1
                 position = SafetySystem.defaultEStopPositions;
             end
-            [f,v,data] = plyread('emergencyStopWallMounted.ply','tri');
+            [f,v,data] = plyread('Models\emergencyStopWallMounted.ply','tri');
             vertexColours = [data.vertex.red, data.vertex.green, data.vertex.blue] / 255;
             handle = trisurf(f, v(:,1)+position(1,4), v(:,2)+position(2,4), v(:,3)+position(3,4),...
                 'FaceVertexCData',vertexColours,'EdgeColor','interp','EdgeLighting','flat');
@@ -56,7 +56,7 @@ classdef SafetySystem
             if nargin < 1
                 position = SafetySystem.defaultFireExtinguisherPosition;
             end
-            [f,v,data] = plyread('fireExtinguisherElevated.ply','tri');
+            [f,v,data] = plyread('Models\fireExtinguisherElevated.ply','tri');
             vertexColours = [data.vertex.red, data.vertex.green, data.vertex.blue] / 255;
             handle = trisurf(f, v(:,1)+position(1,4), v(:,2)+position(2,4), v(:,3)+position(3,4),...
                 'FaceVertexCData',vertexColours,'EdgeColor','interp','EdgeLighting','flat');
@@ -67,7 +67,7 @@ classdef SafetySystem
             if nargin < 1
                 position = SafetySystem.defaultLightCurtainPositions;
             end
-            [f,v,data] = plyread('LightCurtain.ply','tri');
+            [f,v,data] = plyread('Models\LightCurtain.ply','tri');
             vertexColours = [data.vertex.red, data.vertex.green, data.vertex.blue] / 255;
             handle = trisurf(f, v(:,1)+position(1,4), v(:,2)+position(2,4), v(:,3)+position(3,4),...
                 'FaceVertexCData',vertexColours,'EdgeColor','interp','EdgeLighting','flat');
@@ -78,7 +78,7 @@ classdef SafetySystem
             if nargin < 1
                 position = SafetySystem.defaultSirenPosition;
             end
-            [f,v,data] = plyread('Siren.ply','tri');
+            [f,v,data] = plyread('Models\Siren.ply','tri');
             vertexColours = [data.vertex.red, data.vertex.green, data.vertex.blue] / 255;
             handle = trisurf(f, v(:,1)+position(1,4), v(:,2)+position(2,4), v(:,3)+position(3,4),...
                 'FaceVertexCData',vertexColours,'EdgeColor','interp','EdgeLighting','flat');
@@ -89,7 +89,7 @@ classdef SafetySystem
             if nargin < 1
                 position = SafetySystem.defaultAlarmPosition;
             end
-            [f,v,data] = plyread('FireAlarm.ply','tri');
+            [f,v,data] = plyread('Models\FireAlarm.ply','tri');
             vertexColours = [data.vertex.red, data.vertex.green, data.vertex.blue] / 255;
             handle = trisurf(f, v(:,1)+position(1,4), v(:,2)+position(2,4), v(:,3)+position(3,4),...
                 'FaceVertexCData',vertexColours,'EdgeColor','interp','EdgeLighting','flat');
@@ -100,7 +100,7 @@ classdef SafetySystem
             if nargin < 1
                 position = SafetySystem.defaultSignPosition;
             end
-            [f,v,data] = plyread('Sign.ply','tri');
+            [f,v,data] = plyread('Models\Sign.ply','tri');
             vertexColours = [data.vertex.red, data.vertex.green, data.vertex.blue] / 255;
             handle = trisurf(f, v(:,1)+position(1,4), v(:,2)+position(2,4), v(:,3)+position(3,4),...
                 'FaceVertexCData',vertexColours,'EdgeColor','interp','EdgeLighting','flat');

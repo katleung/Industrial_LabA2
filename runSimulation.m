@@ -20,6 +20,9 @@ classdef runSimulation < handle
         closedGrip = deg2rad([-27.6, -14.1,-5.88]);         % Set pose for closed gripper position
         openGrip = deg2rad([-10 -10 0]);                    % Set pose for open gripper position
         
+        forcedCollision = true;                   %  Creating force collision object to avoid
+        obstructionPosition = [0.5,-0.5,0];       % Position of forced collision
+
         robotApp;
         Arduino;
     end
@@ -33,8 +36,8 @@ classdef runSimulation < handle
             end
             
         % set up arduino comms
-            self.Arduino = serialport('COM5', 9600);
-            fopen(self.Arduino);
+            % self.Arduino = serialport('COM5', 9600);
+            % fopen(self.Arduino);
 
             %load in the robot
             self.robotApp = robotGUIa();
@@ -52,7 +55,8 @@ classdef runSimulation < handle
             endJoint = deg2rad([0 -38 5 0 -40 0]);
             steps = 20;
             trajectory = jtraj(q,endJoint,steps);
-            for i = 1:steps                self.irb.model.animate(trajectory(i,:)); % Animating the robot to move to the set joint configuratio
+            for i = 1:steps                
+                self.irb.model.animate(trajectory(i,:)); % Animating the robot to move to the set joint configuratio
                 drawnow()
                 pause(0.005);
             end
@@ -66,10 +70,13 @@ classdef runSimulation < handle
             %fill cups
             self.fillCups(self);
 
+            %Simulated Sensor Inout Demo
+            self.environmentalCollision(self);
+
         % close arduino
-            delete(self.Arduino);
-            clear all;
-            close all;
+            % delete(self.Arduino);
+            % clear all;
+            % close all;
 
         end
         
@@ -90,7 +97,7 @@ classdef runSimulation < handle
             
          end
 
-        %% Generating Cup / Cups?
+        %% Generating Cup / Cups
         function [cupID, cupStartLoc] = loadCups(self)
             cupStartLoc = zeros(1,3);
 
@@ -208,17 +215,39 @@ classdef runSimulation < handle
             i = 1;
             while i <= stepCount % checks if all the steps have been animated
                 if strcmp(self.robotApp.systemState, 'running') % checks if the system is estopped
-                    self.irb.model.animate(irbTraj(i,:)) % Animate the robot's movement
+                    updatedirbTraj = irbTraj; % Initialize with the original trajectory
+                    if self.forcedCollision == true
+                        PlaceObject( 'Models/Obstruction.ply',self.obstructionPosition);
+                        plotOptions.plotFaces = false;
+                        [vertex, faces, faceNormals] = LoadPLYAndVisualize(self.obstructionPosition,plotOptions);
+                        collisionThreshold = 0.05; % Joint increment value
+                        if IsCollision(self.irb,updatedirbTraj(i,:),faces,vertex,faceNormals)
+                            disp('IRB1200: Collision Detected')
+                            while IsCollision(self.irb, updatedirbTraj(i,:), faces, vertex, faceNormals)
+                                updatedirbTraj(i, :) = updatedirbTraj(i, :) + collisionThreshold;
+                            end
+                            disp('Collision Avoided')
+                        end
+                    end
+                    self.irb.model.animate(updatedirbTraj(i,:))
+                    if self.forcedCollision == true
+                        if IsCollision(self.cupbot,ur3traj(i,:),faces,vertex,faceNormals)
+                            disp('UR3: Collision Detected')
+                            guiState = self.robotApp.guiEstopStatus;
+                            strcmp(guiState, 'eStopped');
+                            self.robotApp.updateEStop();
+                        end
+                    end
                     self.cupbot.model.animate(ur3traj(i,:)) % Animate the robot's movement
                     self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
                     self.updateUR3GUI(self); % updates GUI parameters
                     self.updateIRBGUI(self); % updates GUI parameters
-                    self.checkArduinoState(self); % check arduino inputs
+                    %self.checkArduinoState(self); % check arduino inputs
                     drawnow();
                     pause(0.01);
                     i = i+1;
                 else
-                    self.checkArduinoState(self); % check arduino input
+                    %self.checkArduinoState(self); % check arduino input
                     pause(0.01);
                 end
             end
@@ -229,7 +258,30 @@ classdef runSimulation < handle
             i = 1;
             while i <= stepCount % checks if all the steps have been animated
                 if strcmp(self.robotApp.systemState, 'running') % checks if the system is estopped
-                    self.irb.model.animate(irbTraj(i,:)) % Animate the robot's movement
+                    updatedirbTraj = irbTraj; % Initialize with the original trajectory
+                    if self.forcedCollision == true
+                        PlaceObject( 'Models/Obstruction.ply', self.obstructionPosition);
+                        plotOptions.plotFaces = false;
+                        [vertex, faces, faceNormals] = LoadPLYAndVisualize(self.obstructionPosition,plotOptions);
+                        collisionThreshold = 0.05; % Joint increment value
+                    if IsCollision(self.irb,updatedirbTraj(i,:),faces,vertex,faceNormals)
+                        disp('IRB1200: Collision Detected')
+                        while IsCollision(self.irb, updatedirbTraj(i,:), faces, vertex, faceNormals)
+                            updatedirbTraj(i, :) = updatedirbTraj(i, :) + collisionThreshold;
+                        end
+                        disp('Collision Avoided')
+                    end
+                    end
+                    
+                    self.irb.model.animate(updatedirbTraj(i,:))
+                    if self.forcedCollision == true
+                        if IsCollision(self.cupbot,ur3traj(i,:),faces,vertex,faceNormals)
+                            disp('UR3: Collision Detected')
+                            guiState = self.robotApp.guiEstopStatus;
+                            strcmp(guiState, 'eStopped');
+                            self.robotApp.updateEStop();
+                        end
+                    end
                     self.cupbot.model.animate(ur3traj(i,:)) % Animate the robot's movement
                     self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
 
@@ -242,12 +294,12 @@ classdef runSimulation < handle
                     self.cupID{iD} = PlaceObject('Models\cup2.ply', cupPos(1:3, 4)'+ [self.armToCupOffset, 0, 0]); % places the cup model at the end effector's location
                     self.updateUR3GUI(self); % updates GUI parameters
                     self.updateIRBGUI(self); % updates GUI parameters
-                    self.checkArduinoState(self); % check arduino input
+                    %self.checkArduinoState(self); % check arduino input
                     drawnow();
                     pause(0.01);
                     i = i+1;
                 else
-                    self.checkArduinoState(self); % check arduino input
+                    %self.checkArduinoState(self); % check arduino input
                     pause(0.01);
                 end
             end
@@ -258,16 +310,27 @@ classdef runSimulation < handle
             i = 1;
             while i <= stepCount % checks if all the steps have been animated
                 if strcmp(self.robotApp.systemState, 'running') % checks if the system is estopped
+                    if self.forcedCollision == true
+                        PlaceObject( 'Models/Obstruction.ply',self.obstructionPosition);
+                        plotOptions.plotFaces = false;
+                        [vertex, faces, faceNormals] = LoadPLYAndVisualize(self.obstructionPosition,plotOptions);
+                        if IsCollision(self.cupbot,ur3traj(i,:),faces,vertex,faceNormals)
+                            disp('UR3: Collision Detected')
+                            guiState = self.robotApp.guiEstopStatus;
+                            strcmp(guiState, 'eStopped');
+                            self.robotApp.updateEStop();
+                        end
+                    end
                     self.cupbot.model.animate(ur3traj(i,:)) % Animate the robot's movement
                     self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
                     self.updateUR3GUI(self); % updates GUI parameters
                     self.updateIRBGUI(self); % updates GUI parameters
-                    self.checkArduinoState(self); % check arduino input
+                    %self.checkArduinoState(self); % check arduino input
                     drawnow();
                     pause(0.01);
                     i = i+1;
                 else
-                    self.checkArduinoState(self); % check arduino input
+                    %self.checkArduinoState(self); % check arduino input
                     pause(0.01);
                 end
             end
@@ -278,6 +341,17 @@ classdef runSimulation < handle
             i = 1;
             while i <= stepCount % checks if all the steps have been animated
                 if strcmp(self.robotApp.systemState, 'running') % checks if the system is estopped
+                    if self.forcedCollision == true
+                        PlaceObject( 'Models/Obstruction.ply',self.obstructionPosition);
+                        plotOptions.plotFaces = false;
+                        [vertex, faces, faceNormals] = LoadPLYAndVisualize(self.obstructionPosition,plotOptions);
+                        if IsCollision(self.cupbot,ur3traj(i,:),faces,vertex,faceNormals)
+                            disp('UR3: Collision Detected')
+                            guiState = self.robotApp.guiEstopStatus;
+                            strcmp(guiState, 'eStopped');
+                            self.robotApp.updateEStop();
+                        end
+                    end
                     self.cupbot.model.animate(ur3traj(i,:)) % Animate the robot's movement
                     self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
 
@@ -290,12 +364,12 @@ classdef runSimulation < handle
                     self.cupID{iD} = PlaceObject('Models\cup2.ply', cupPos(1:3, 4)'+ [self.armToCupOffset, 0, 0]); % places the cup model at the end effector's location
                     self.updateUR3GUI(self); % updates GUI parameters
                     self.updateIRBGUI(self); % updates GUI parameters
-                    self.checkArduinoState(self); % check arduino input
+                    %self.checkArduinoState(self); % check arduino input
                     drawnow();
                     pause(0.01);
                     i = i+1;
                 else
-                    self.checkArduinoState(self); % check arduino input
+                    %self.checkArduinoState(self); % check arduino input
                     pause(0.01);
                 end
             end
@@ -382,7 +456,7 @@ classdef runSimulation < handle
             end
 
             flush(self.Arduino);            
-            state = self.readDataFromArduino(self)
+            %state = self.readDataFromArduino(self)
             if state == 1 % e-Stop button has been pressed on Arduino
                 if strcmp(guiState, 'released') % if gui release button has been pressed
                     self.sendDataToArduino(self, 5); % set arduino to 2 = released state
@@ -512,6 +586,35 @@ classdef runSimulation < handle
             
             % Update xyzrpy display
             self.robotApp.UpdateIRBPose();
+        end
+          %% Simulated Sensor Enacting Collision
+        function environmentalCollision(self)
+            planeNormal = [0,1,0];
+            planePoint = [0,-1.1,0];
+
+            objectPathFile = 'Models/Obstruction.ply';
+            startPosition = [-1,-2,0];
+            movementVector = [0,0.1,0];
+            sensedObject = PlaceObject(objectPathFile, startPosition);
+            steps = 20;
+
+            for i = 1:steps
+                delete(sensedObject)
+                newPosition = startPosition + i* movementVector;
+                % intersection between the line (line) and plane (obstacle)
+                [intersectionPoints,check] = LinePlaneIntersection(planeNormal,planePoint,startPosition,newPosition);
+                if check == 1
+                    disp('Light Gate Detected Motion');
+                    guiState = self.robotApp.guiEstopStatus;
+                    strcmp(guiState, 'eStopped');
+                    self.robotApp.updateEStop();
+                    break; 
+
+                end
+                sensedObject = PlaceObject(objectPathFile, newPosition);
+                drawnow;
+                pause(0.5)
+            end
         end
     end
 end
