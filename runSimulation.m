@@ -11,15 +11,12 @@ classdef runSimulation < handle
         toppingsLocation = [0.95,-1.022,0.113];
         cupStartLoc = zeros(1,3);               % Initialise all cup startLocation with zeros
         cupStatus = zeros(1,1);                 % Initialise all cup statuses to 0 (empty)
-        cupEndLoc = zeros(1,3);                 % Initialise all cup endLocations with zeros
         cupID = {};                             % Initialise empty cell array to store cup handles (so that they can be deleted later)
         cupFillLoc = [0.4, -0.18, 0.518];     % Set filling location for cup
         irbCupFillLoc = [0.35, -0.19, 0.647];
         cupResetLoc = [0.231, 0.333, 0.453];    % Set reset location for cupbot to avoid hitting the next cup
         armToCupOffset = 0.05; 
         
-        rotateEnd = [1 0 0; 0 0 -1; 0 1 0]; % rotation matrix to make EE face downwards
-
         closedGrip = deg2rad([-27.6, -14.1,-5.88]);         % Set pose for closed gripper position
         openGrip = deg2rad([-10 -10 0]);                    % Set pose for open gripper position
         
@@ -40,7 +37,7 @@ classdef runSimulation < handle
             fopen(self.Arduino);
 
             %load in the robot
-            self.robotApp = robotGUI();
+            self.robotApp = robotGUIa();
             self.cupbot = self.robotApp.ur3robot;
             self.irb = self.robotApp.irb;
             self.gripper{1} = self.robotApp.ur3Gripper{1};
@@ -55,21 +52,19 @@ classdef runSimulation < handle
             endJoint = deg2rad([0 -38 5 0 -40 0]);
             steps = 20;
             trajectory = jtraj(q,endJoint,steps);
-            for i = 1:steps
-                self.irb.model.animate(trajectory(i,:)); % Animating the robot to move to the set joint configuratio
+            for i = 1:steps                self.irb.model.animate(trajectory(i,:)); % Animating the robot to move to the set joint configuratio
                 drawnow()
                 pause(0.005);
             end
 
             %load bricks/cups
             [self.cupID, self.cupStartLoc] = self.loadCups(self); % For testing within the class, without starterScript
-            self.cupEndLoc = self.cupEndLocationSet(self);
 
             %load in environment
             self.LoadEnviro(self);
 
-            %buildwall
-            self.buildWall(self);
+            %fill cups
+            self.fillCups(self);
 
         % close arduino
             delete(self.Arduino);
@@ -80,12 +75,14 @@ classdef runSimulation < handle
         
         %% Loading the Environment
          function LoadEnviro(self)
-            % load in surface texture for concrete floor
+            % load in surface texture for marble floor
             surf([-4,-4;4,4],[-4,4;-4,4],[-0.152,-0.152;-0.152,-0.152],'CData',imread('Models\marble.jpg'),'FaceColor','texturemap');    %Load concrete floor
             hold on;
+
+            % placing the environment models
             PlaceObject('Models\bowl.ply', [0.95,-0.9,0]);
             hold on;
-            SafetySystem.ActivateAll; 
+            SafetySystem.ActivateAll; % calling the safety system class to import environment models
             PlaceObject('Models\CoffeeTable2.ply',[0.6, 0.3, -0.152]);
             PlaceObject('Models\CoffeeTable3.ply',[0.95,-0.9, -0.152]);
             PlaceObject('Models\mount3.ply',[0, 0, 0]);
@@ -109,21 +106,8 @@ classdef runSimulation < handle
             end 
         end
 
-        %% Set end locations for cups
-        function cupEndLoc = cupEndLocationSet(self)
-            cupEndLoc = zeros(1,3);
-            endLoc(1,:) = self.cupStartLoc(1,:); % return cup to its original position 
-            % endLoc(2,:) = [0.231, 0.333, 0.453];
-            % endLoc(3,:) = [0.231, 0.333, 0.453];
-
-            for n = 1:height(endLoc) % for number of rows in cup array
-                updateLoc = transl(endLoc(n,:)) * self.baseTr;
-                cupEndLoc(n,:) = [updateLoc(1,4), updateLoc(2,4), updateLoc(3,4)];
-            end 
-        end
-        
         %% Move Cup (build wall)
-        function buildWall(self)
+        function fillCups(self)
             % Set the initial joint angles to the current robot position
             q = self.cupbot.model.getpos();
             offsetPose = transl(-self.armToCupOffset, 0, 0)* trotx(pi);
@@ -132,17 +116,11 @@ classdef runSimulation < handle
             for i = 1:n
                 self.cupStatus(i) = 0;
                 while self.cupStatus(i) <4
-                    if self.cupStatus(i) == -1
-                        goalQ = deg2rad([-90,-45,45,-90,90,0]);
-                        goalPos = self.cupbot.model.fkine(goalQ).T;
-                        self.moveCupbotNOCup(self,goalQ,self.jtrajStepCount);
-                    elseif self.cupStatus(i) == 0 % move to cup start location, close gripper
+                    if self.cupStatus(i) == 0 % move to cup start location, close gripper
                         totalSteps = 40;
                         ur3FirstSteps = 30;
                         ur3SecondSteps = totalSteps-ur3FirstSteps;
                         self.cupbot.model.getpos
-                        % startCupLocationWaypoint = transl(self.cupStartLoc(i,:))*offsetWaypoint;
-                        
                         % trajectory to move to waypoint above cup
                         goalQAboveCup = self.cupbot.model.ikine(transl(self.cupStartLoc(i,:))*offsetWaypoint, 'q0', self.cupbot.model.getpos, 'mask', [1,1,1,0,0,0]);
                         trajectoryAboveCup = jtraj(self.cupbot.model.getpos, goalQAboveCup,ur3FirstSteps);
@@ -163,13 +141,9 @@ classdef runSimulation < handle
                         ur3FirstSteps = 30;
                         ur3SecondSteps = totalSteps-ur3FirstSteps;
                         % move to waypoint above cup
-                        % goalQ = self.cupbot.model.ikine(transl(self.cupStartLoc(i,:))*offsetWaypoint, 'q0', q, 'mask', [1,1,1,0,0,0])
-                        % self.moveCupbotWITHCup(self,i,goalQ,self.jtrajStepCount);
                         startCupLocationWaypoint = transl(self.cupStartLoc(i,:))*offsetWaypoint;
                         trajectoryAboveCup = self.rmrc(self, self.cupbot.model.getpos, [startCupLocationWaypoint(1,4), startCupLocationWaypoint(2,4), startCupLocationWaypoint(3,4)], ur3SecondSteps, self.cupbot);
                         % move to fill location
-                        % goalQ = self.cupbot.model.ikine(transl(self.cupFillLoc(i,:))*offsetPose, 'q0', trajectoryAboveCup(end,:), 'mask', [1,1,1,0,0,0]);
-                        % trajectoryToToppings = jtraj(trajectoryAboveCup(end,:), goalQ,ur3FirstSteps);
                         fillLocationPoint = transl(self.cupFillLoc(1,:))*offsetPose;
                         trajectoryToToppings = self.rmrc(self, trajectoryAboveCup(end,:), [fillLocationPoint(1,4), fillLocationPoint(2,4), fillLocationPoint(3,4)], ur3FirstSteps, self.cupbot);
                         % total UR3 trajectory
@@ -208,6 +182,8 @@ classdef runSimulation < handle
 
                 end
             end
+
+            % Setting the GUI parameters to enable teach functionality once the simulation has finished
             self.robotApp.simFinished = true;
             self.robotApp.UR3Joint1Slider.Enable = true;
             self.robotApp.UR3Joint2Slider.Enable = true;
@@ -230,13 +206,13 @@ classdef runSimulation < handle
         %% UR3 and IRB animation without cup
         function animateBothRobotsNoCup(self, ur3traj, irbTraj, stepCount)            
             i = 1;
-            while i <= stepCount
-                if strcmp(self.robotApp.systemState, 'running')
-                    self.irb.model.animate(irbTraj(i,:))
+            while i <= stepCount % checks if all the steps have been animated
+                if strcmp(self.robotApp.systemState, 'running') % checks if the system is estopped
+                    self.irb.model.animate(irbTraj(i,:)) % Animate the robot's movement
                     self.cupbot.model.animate(ur3traj(i,:)) % Animate the robot's movement
                     self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
-                    self.updateUR3GUI(self);
-                    self.updateIRBGUI(self);
+                    self.updateUR3GUI(self); % updates GUI parameters
+                    self.updateIRBGUI(self); % updates GUI parameters
                     self.checkArduinoState(self); % check arduino inputs
                     drawnow();
                     pause(0.01);
@@ -251,9 +227,9 @@ classdef runSimulation < handle
         %% UR3 and IRB animation with empty cups
         function animateBothRobotsEmptyCup(self, ur3traj, irbTraj, stepCount, iD)            
             i = 1;
-            while i <= stepCount
-                if strcmp(self.robotApp.systemState, 'running')
-                    self.irb.model.animate(irbTraj(i,:))
+            while i <= stepCount % checks if all the steps have been animated
+                if strcmp(self.robotApp.systemState, 'running') % checks if the system is estopped
+                    self.irb.model.animate(irbTraj(i,:)) % Animate the robot's movement
                     self.cupbot.model.animate(ur3traj(i,:)) % Animate the robot's movement
                     self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
 
@@ -262,10 +238,10 @@ classdef runSimulation < handle
                     catch
                     end
                     currentPose = self.cupbot.model.getpos(); % initialise a variable with the right number of joint values
-                    cupPos = self.cupbot.model.fkine(currentPose).T;
-                    self.cupID{iD} = PlaceObject('Models\cup2.ply', cupPos(1:3, 4)'+ [self.armToCupOffset, 0, 0]);
-                    self.updateUR3GUI(self);
-                    self.updateIRBGUI(self);
+                    cupPos = self.cupbot.model.fkine(currentPose).T; % UR3's current end effector pose
+                    self.cupID{iD} = PlaceObject('Models\cup2.ply', cupPos(1:3, 4)'+ [self.armToCupOffset, 0, 0]); % places the cup model at the end effector's location
+                    self.updateUR3GUI(self); % updates GUI parameters
+                    self.updateIRBGUI(self); % updates GUI parameters
                     self.checkArduinoState(self); % check arduino input
                     drawnow();
                     pause(0.01);
@@ -280,12 +256,12 @@ classdef runSimulation < handle
         %% UR3 animation without cup
         function animateUR3(self, ur3traj, stepCount)
             i = 1;
-            while i <= stepCount
-                if strcmp(self.robotApp.systemState, 'running')
+            while i <= stepCount % checks if all the steps have been animated
+                if strcmp(self.robotApp.systemState, 'running') % checks if the system is estopped
                     self.cupbot.model.animate(ur3traj(i,:)) % Animate the robot's movement
                     self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
-                    self.updateUR3GUI(self);
-                    self.updateIRBGUI(self);
+                    self.updateUR3GUI(self); % updates GUI parameters
+                    self.updateIRBGUI(self); % updates GUI parameters
                     self.checkArduinoState(self); % check arduino input
                     drawnow();
                     pause(0.01);
@@ -300,8 +276,8 @@ classdef runSimulation < handle
         %% UR3 animation with empty cups
         function animateUR3WithCup(self, ur3traj, stepCount, iD)
             i = 1;
-            while i <= stepCount
-                if strcmp(self.robotApp.systemState, 'running')
+            while i <= stepCount % checks if all the steps have been animated
+                if strcmp(self.robotApp.systemState, 'running') % checks if the system is estopped
                     self.cupbot.model.animate(ur3traj(i,:)) % Animate the robot's movement
                     self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
 
@@ -310,10 +286,10 @@ classdef runSimulation < handle
                     catch
                     end
                     currentPose = self.cupbot.model.getpos(); % initialise a variable with the right number of joint values
-                    cupPos = self.cupbot.model.fkine(currentPose).T;
-                    self.cupID{iD} = PlaceObject('Models\cup2.ply', cupPos(1:3, 4)'+ [self.armToCupOffset, 0, 0]);
-                    self.updateUR3GUI(self);
-                    self.updateIRBGUI(self);
+                    cupPos = self.cupbot.model.fkine(currentPose).T; % UR3's current end effector pose
+                    self.cupID{iD} = PlaceObject('Models\cup2.ply', cupPos(1:3, 4)'+ [self.armToCupOffset, 0, 0]); % places the cup model at the end effector's location
+                    self.updateUR3GUI(self); % updates GUI parameters
+                    self.updateIRBGUI(self); % updates GUI parameters
                     self.checkArduinoState(self); % check arduino input
                     drawnow();
                     pause(0.01);
@@ -325,35 +301,6 @@ classdef runSimulation < handle
             end
         end
 
-
-        % %% Move UR3 with cup
-        % function moveCupbotWITHCup(self, iD, goal, stepCount)
-        %     steps = jtraj(self.cupbot.model.getpos(), goal, stepCount);
-        % 
-        %     i = 1;
-        %     while i <= stepCount
-        %         if strcmp(self.robotApp.systemState, 'running')
-        %             currentPose = self.cupbot.model.getpos(); % initialise a variable with the right number of joint values
-        %             trEnd = self.cupbot.model.fkine(currentPose).T;
-        %             currentPose(1:3) = steps(i, 1:3); % Only update the position part of the pose
-        %             self.cupbot.model.animate(currentPose) % Animate the robot's movement
-        %             self.transformGripper(self); % Animate the gripper transform by one step to the same end-effector position
-        % 
-        %             try
-        %                 delete(self.cupID{iD});
-        %             catch
-        %             end
-        % 
-        %             cupPos = trEnd;
-        %             self.cupID{iD} = PlaceObject('Models\cup2.ply', cupPos(1:3, 4)'+ [self.armToCupOffset, 0, 0]);
-        % 
-        %             drawnow();
-        %             pause(0.005);
-        %             i = i+1;
-        %         end
-        %     end
-        % 
-        % end
 
         %% Move gripper fingers
         function moveFingers(self, state, stepCount)
@@ -412,13 +359,6 @@ classdef runSimulation < handle
 
         %% Read Arduino Data
         function receivedData = readDataFromArduino(self)
-            % % Read data from the Arduino
-            % if self.Arduino.BytesAvailable > 0
-            %     receivedData = fscanf(self.Arduino, '%d');
-            % else
-            %     receivedData = NaN; % Return a default value if no data is available
-            % end
-
             % Attempt to read data from the Arduino
             try
                 receivedData = fscanf(self.Arduino, '%d');
@@ -429,7 +369,7 @@ classdef runSimulation < handle
 
         %% Write to Arduino
         function sendDataToArduino(self, data)
-            % Send data to the Arduino
+            % Send data (double) to the Arduino
             fprintf(self.Arduino, '%d', data);
         end
 
@@ -462,34 +402,31 @@ classdef runSimulation < handle
 
         %% RMRC function
         function qMatrix = rmrc(self, startQ, endPos, steps, robot)
-            T1 = robot.model.fkine(startQ).T;
+            T1 = robot.model.fkine(startQ).T; % robot's starting pose
 
-            M = [1 1 1 zeros(1,3)];                         % Masking Matrix
+            M = [1 1 1 zeros(1,3)]; % Masking Matrix
 
-            x1 = [robot.model.fkine(startQ).t(1) robot.model.fkine(startQ).t(2) robot.model.fkine(startQ).t(3)]';
-            x2 = endPos';
-            deltaT = 0.05;     % change in time between each step                                   % Discrete time step
+            x1 = [robot.model.fkine(startQ).t(1) robot.model.fkine(startQ).t(2) robot.model.fkine(startQ).t(3)]'; % robot's start position
+            x2 = endPos'; % robot's end position
+            deltaT = 0.05; % change in time between each step 
 
-            % 3.7
             x = zeros(3,steps); % zeros for columns 1 to steps. Stores x and y and z positions for each step of the trajectory
-            s = lspb(0,1,steps);                                 % Create interpolation scalar
+            s = lspb(0,1,steps); % create interpolation scalar
             for i = 1:steps
-                x(:,i) = x1*(1-s(i)) + s(i)*x2; % x position at each step                 % Create trajectory in x-y plane
+                x(:,i) = x1*(1-s(i)) + s(i)*x2; % create robot trajectory
             end
 
-            % 3.8
-            qMatrix = nan(steps,6); % stores joint angles at each step
+            qMatrix = nan(steps,6); % empty matrix used to store joint angles at each step
 
-            qMatrix(1,:) = robot.model.ikine(T1, 'q0', startQ, 'mask', M);
+            qMatrix(1,:) = robot.model.ikine(T1, 'q0', startQ, 'mask', M); % matrix stores joint angles at each step
 
-            % 3.10
             for i = 1:steps-1
-                xdot = (x(:,i+1) - x(:,i))/deltaT;   % calculates velocity at each position by getting change between next and current position and dividing by time step                          % Calculate velocity at discrete time step
+                xdot = (x(:,i+1) - x(:,i))/deltaT; % calculates velocity at each position by getting change between next and current position and dividing by time step                          % Calculate velocity at discrete time step
                 xdot = [xdot' 0 0 0];
-                J = robot.model.jacob0(qMatrix(i,:));            % Get the Jacobian at the current state
-                J = J(1:6,:);                           % Take only first 2 rows
-                qdot = inv(J)*xdot'; % change in joint angles   (velocity of joint angles)                         % Solve velocitities via RMRC
-                qMatrix(i+1,:) =  qMatrix(i,:) + deltaT*qdot';                   % Update next joint state
+                J = robot.model.jacob0(qMatrix(i,:)); % get the Jacobian at the current state
+                J = J(1:6,:); % take the first six rows
+                qdot = inv(J)*xdot'; % change in joint angles (velocity of joint angles). Velocities solved via RMRC
+                qMatrix(i+1,:) =  qMatrix(i,:) + deltaT*qdot'; % next joint state updates
             end
         end
         
@@ -500,6 +437,8 @@ classdef runSimulation < handle
             totalToppings = 5;
             distance = 0.15;
             increments = 0.02;
+
+            % the for loop goes through all the topics and places an object starting from the robot's end effector position down into the cup
             for i = 1:totalToppings
                 for j = i:-1:1
                     if increments*(i-j) < distance
@@ -512,6 +451,7 @@ classdef runSimulation < handle
                 pause(0.001);
             end
 
+            % the for loop goes through all the topics and deletes the objects
             for i = totalToppings:-1:1
                 try
                     delete(toppings{i})
@@ -527,6 +467,8 @@ classdef runSimulation < handle
             totalToppings = 5;
             distance = 0.05;
             increments = 0.02;
+
+            % the for loop goes through all the topics and places an object starting from the bowl to the robot's end effector position
             for i = 1:totalToppings
                 for j = i:-1:1
                     if increments*(i-j) < distance
@@ -538,7 +480,8 @@ classdef runSimulation < handle
                 end
                 pause(0.001);
             end
-
+            
+            % the for loop goes through all the topics and deletes the objects
             for i = totalToppings:-1:1
                 try
                     delete(toppings{i})
@@ -559,7 +502,7 @@ classdef runSimulation < handle
             self.robotApp.UpdateUR3Pose();
         end
 
-        %% Update GUI UR3
+        %% Update GUI IRB
         function updateIRBGUI(self)
             % Update joint values
             q = self.irb.model.getpos;
